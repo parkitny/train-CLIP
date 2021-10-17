@@ -160,11 +160,12 @@ class CustomCLIPWrapper(CLIPWrapper):
                  minibatch_size,
                  learning_rate=3e-3,
                  kl_coeff=1.0,
-                 avg_word_embs=False
+                 avg_word_embs=False,
+                 model_name='RN50'
                  ):
         with open('models/configs/RN.yaml') as fin:
-            config = yaml.safe_load(fin)['RN50']
-        super().__init__('RN50', config, minibatch_size)
+            config = yaml.safe_load(fin)[model_name]
+        super().__init__(model_name, config, minibatch_size)
         del self.model.visual
         del self.model.transformer
         self.model.visual = image_encoder

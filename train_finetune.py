@@ -19,7 +19,7 @@ def main(hparams):
     if hparams.minibatch_size < 1:
         hparams.minibatch_size = hparams.batch_size
 
-    model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_word_embs=True)
+    model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_word_embs=True, model_name=hparams.model_name)
 
     if hparams.merge_base_clip_into_clip_vil:
         # This just embeds the above loaded clip into CLIP-ViL so it can be tested
