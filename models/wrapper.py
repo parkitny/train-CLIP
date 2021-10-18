@@ -8,6 +8,7 @@ import yaml
 import copy
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from .model import CLIP
+from transformers.tokenization_utils_base import BatchEncoding
 
 
 class CLIPWrapper(pl.LightningModule):
@@ -195,14 +196,11 @@ class CustomCLIPWrapper(CLIPWrapper):
 
         # adjust embedding dictionaries
         text_mbs = []
-        if isinstance(text, dict):
-            for s in text_mbs_ids:
-                d = {}
-                for key in list(text.keys()):
-                    d[key] = text[key][s]
-                text_mbs.append(d)
-        else:
-            text_mbs = text
+        for s in text_mbs_ids:
+            d = {}
+            for key in list(text.keys()):
+                d[key] = text[key][s]
+            text_mbs.append(d)
 
         # calculate original statistics
         with torch.no_grad():
@@ -285,8 +283,8 @@ class CustomCLIPWrapper(CLIPWrapper):
     def encode_text_clip_vil(self, text, model):    
         # We are passing one piece of text at a time so unsqueeze the first dim.
         # The gather function will combine the output for us...
-        x = torch.unsqueeze(model.token_embedding(text).type(self.dtype), 0)  # [batch_size, n_ctx, d_model]
-
+        #x = torch.unsqueeze(model.token_embedding(text).type(self.dtype), 0)  # [batch_size, n_ctx, d_model]
+        x = model.token_embedding(text).type(self.dtype) # [batch_size, n_ctx, d_model]
         x = x + model.positional_embedding.type(self.dtype)
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = model.transformer(x)
@@ -303,9 +301,15 @@ class CustomCLIPWrapper(CLIPWrapper):
         if self.model_name == 'RN50x4_VIL':
             # TODO: Apply the attention mask here?
             if teacher:
-                return self.encode_text_clip_vil(inputs, self.teacher)
+                _model = self.teacher
             else:
-                return self.encode_text_clip_vil(inputs, self.model)
+                _model = self.model
+            sequence_output = self.encode_text_clip_vil(inputs['input_ids'], _model)
+            return sequence_output
+            #embeddings = torch.sum(
+            #        sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
+            #    ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
+            #return embeddings
         else:
             if self.avg_word_embs:
                 sequence_output = self.teacher.transformer(**inputs)[0] if teacher else self.model.transformer(**inputs)[0]

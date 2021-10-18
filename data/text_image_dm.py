@@ -12,6 +12,7 @@ from torchvision import transforms as T
 from pytorch_lightning import LightningDataModule
 from models.simple_tokenizer import SimpleTokenizer
 from typing import List, Union
+from transformers.tokenization_utils_base import BatchEncoding
 class TextImageDataset(Dataset):
     def __init__(self,
                  folder: str,
@@ -144,13 +145,18 @@ class TextImageDataModule(LightningDataModule):
         eot_token = self.custom_tokenizer.encoder["<|endoftext|>"]
         all_tokens = [[sot_token] + self.custom_tokenizer.encode(text) + [eot_token] for text in texts]
         result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
-
+        # Mask the padded part of the input_ids, 0 for padded, 1 for tokens
+        attn = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
         for i, tokens in enumerate(all_tokens):
             if len(tokens) > context_length:
                 raise RuntimeError(f"Input {texts[i]} is too long for context length {context_length}")
             result[i, :len(tokens)] = torch.tensor(tokens)
-
-        return result
+            attn[i,result[i] > 0] = 1
+        outputs = BatchEncoding(data={
+                'input_ids': result,
+                'attention_mask': attn
+            })
+        return outputs
 
 
     @staticmethod
