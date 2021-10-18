@@ -6,7 +6,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+from typing import List
+from simple_tokenizer import SimpleTokenizer as _Tokenizer
 
+_tokenizer = _Tokenizer()
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -146,8 +149,7 @@ class ModifiedResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        #TODO: Modified
-        #x = self.attnpool(x)
+        x = self.attnpool(x)
 
         return x
 

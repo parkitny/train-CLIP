@@ -7,7 +7,9 @@ from torchvision.models import resnet50
 from transformers import AutoTokenizer, AutoModel
 
 from models.state import merge_fine_tune_CLIP_into_CLIP_ViL, extract_CLIP_from_CLIP_ViL
+from simple_tokenizer import SimpleTokenizer as _Tokenizer
 
+import yaml
 
 def main(hparams):
     img_encoder = resnet50(pretrained=True)
@@ -33,8 +35,13 @@ def main(hparams):
     else:
         # Load CLIP using weights from the CLIP-ViL checkpoint.
         state_dict = extract_CLIP_from_CLIP_ViL(hparams.load_checkpoint, model.model)
-        tokenizer = AutoTokenizer.from_pretrained("johngiorgi/declutr-sci-base")
+        #tokenizer = BertTokenizer.from_pretrained(
+        #    "bert-base-uncased", do_lower_case=True
+        #)
+        tokenizer = _Tokenizer()
         model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_word_embs=True, model_name=hparams.model_name, state_dict=state_dict)
+        # Need to populate the missing params here from config...
+        hparams.image_size = model.model.visual.input_resolution # Fixes issue with previously commented out self.attnpool in ModifiedRes
         dm = TextImageDataModule.from_argparse_args(hparams, custom_tokenizer=tokenizer)
         trainer = Trainer.from_argparse_args(hparams, precision=16, max_epochs=32)
         trainer.fit(model, dm)

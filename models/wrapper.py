@@ -195,11 +195,14 @@ class CustomCLIPWrapper(CLIPWrapper):
 
         # adjust embedding dictionaries
         text_mbs = []
-        for s in text_mbs_ids:
-            d = {}
-            for key in list(text.keys()):
-                d[key] = text[key][s]
-            text_mbs.append(d)
+        if isinstance(text, dict):
+            for s in text_mbs_ids:
+                d = {}
+                for key in list(text.keys()):
+                    d[key] = text[key][s]
+                text_mbs.append(d)
+        else:
+            text_mbs = text
 
         # calculate original statistics
         with torch.no_grad():
@@ -217,6 +220,7 @@ class CustomCLIPWrapper(CLIPWrapper):
                 txt = [txt]
 
             image_logits_notemp = torch.cat(ims) @ torch.cat(txt).t()
+
             image_logits = image_logits_notemp * self.model.logit_scale.exp()
             ground_truth = torch.arange(len(image_logits)).type_as(image_logits).long()
             loss = (F.cross_entropy(image_logits, ground_truth) + F.cross_entropy(image_logits.t(), ground_truth)).div(2)
@@ -277,17 +281,55 @@ class CustomCLIPWrapper(CLIPWrapper):
         self.sink_temp.data.clamp_(-np.log(100), np.log(100))
         self.update_teacher()
 
+    def _encode_text_clip_vil(self, text, model):
+        x = model.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
+
+        #x = x + self.positional_embedding.type(self.dtype)
+        x = torch.unsqueeze(x, 0)
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        x = model.transformer(x)
+        x = x.permute(1, 0, 2)  # LND -> NLD
+        x = model.ln_final(x).type(self.dtype)
+
+        # x.shape = [batch_size, n_ctx, transformer.width]
+        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ model.text_projection
+
+        return x
+
+    def encode_text_clip_vil(self, text, model):    
+        # We are passing one piece of text at a time so unsqueeze the first dim.
+        x = torch.unsqueeze(model.token_embedding(text).type(self.dtype), 0)  # [batch_size, n_ctx, d_model]
+
+        x = x + model.positional_embedding.type(self.dtype)
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        x = model.transformer(x)
+        x = x.permute(1, 0, 2)  # LND -> NLD
+        x = model.ln_final(x).type(self.dtype)
+
+        # x.shape = [batch_size, n_ctx, transformer.width]
+        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ model.text_projection
+
+        return x
+
     def encode_text(self, inputs, teacher=False):
-        if self.avg_word_embs:
-            sequence_output = self.teacher.transformer(**inputs)[0] if teacher else self.model.transformer(**inputs)[0]
-
-            embeddings = torch.sum(
-                sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
-            ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
-
-            return embeddings
+        if self.model_name == 'RN50x4_VIL':
+            if teacher:
+                return self.encode_text_clip_vil(inputs, self.teacher)
+            else:
+                return self.encode_text_clip_vil(inputs, self.model)
         else:
-            return self.teacher.transformer(**inputs)[1] if teacher else self.model.transformer(**inputs)[1]
+            if self.avg_word_embs:
+                sequence_output = self.teacher.transformer(**inputs)[0] if teacher else self.model.transformer(**inputs)[0]
+
+                embeddings = torch.sum(
+                    sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
+                ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
+
+                return embeddings
+            else:
+                return self.teacher.transformer(**inputs)[1] if teacher else self.model.transformer(**inputs)[1]
 
     def compute_similarities(self, I_emb, T_emb):
         sim_ii, sim_tt = I_emb @ I_emb.t(), T_emb @ T_emb.t()
