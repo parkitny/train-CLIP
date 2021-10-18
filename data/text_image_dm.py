@@ -10,8 +10,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as T
 from pytorch_lightning import LightningDataModule
-from simple_tokenizer import SimpleTokenizer
-from typing import List, Union, Dict
+from models.simple_tokenizer import SimpleTokenizer
+from typing import List, Union
 class TextImageDataset(Dataset):
     def __init__(self,
                  folder: str,
@@ -105,15 +105,6 @@ class TextImageDataset(Dataset):
         return image_tensor, tokenized_text
 
 
-class InputFeatures(object):
-    """A single set of features of data."""
-
-    def __init__(self, input_ids, input_mask, segment_ids):
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-
-
 class TextImageDataModule(LightningDataModule):
     def __init__(self,
                  folder: str,
@@ -144,60 +135,6 @@ class TextImageDataModule(LightningDataModule):
         self.shuffle = shuffle
         self.custom_tokenizer = custom_tokenizer
 
-    @staticmethod
-    def collate_text_feats(features):
-        output = {
-            'input_ids' : [],
-            'token_type_ids' : [],
-            'attention_mask' : []
-        }
-        for f in features:
-            output['input_ids'].append(f.input_ids)
-            output['token_type_ids'].append(f.segment_ids)
-            output['attention_mask'].append(f.input_mask)
-        output = {k: torch.tensor(v) for k, v in output.items()}
-        return output
-
-
-    @staticmethod
-    def convert_sents_to_features(sents, max_seq_length, tokenizer):
-        """Loads a data file into a list of `InputBatch`s."""
-
-        features = []
-        for (i, sent) in enumerate(sents):
-            tokens_a = tokenizer.tokenize(sent.strip())
-
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(tokens_a) > max_seq_length - 2:
-                tokens_a = tokens_a[: (max_seq_length - 2)]
-
-            # Keep segment id which allows loading BERT-weights.
-            tokens = ["[CLS]"] + tokens_a + ["[SEP]"]
-            segment_ids = [0] * len(tokens)
-
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
-
-            # The mask has 1 for real tokens and 0 for padding tokens. Only real
-            # tokens are attended to.
-            input_mask = [1] * len(input_ids)
-
-            # Zero-pad up to the sequence length.
-            padding = [0] * (max_seq_length - len(input_ids))
-            input_ids += padding
-            input_mask += padding
-            segment_ids += padding
-
-            assert len(input_ids) == max_seq_length
-            assert len(input_mask) == max_seq_length
-            assert len(segment_ids) == max_seq_length
-
-            features.append(
-                InputFeatures(
-                    input_ids=input_ids, input_mask=input_mask, segment_ids=segment_ids
-                )
-            )
-        return features
-
 
     def simple_tokenize(self, texts: Union[str, List[str]], context_length: int = 77):
         if isinstance(texts, str):
@@ -214,6 +151,7 @@ class TextImageDataModule(LightningDataModule):
             result[i, :len(tokens)] = torch.tensor(tokens)
 
         return result
+
 
     @staticmethod
     def add_argparse_args(parent_parser):
@@ -237,12 +175,6 @@ class TextImageDataModule(LightningDataModule):
             return torch.stack([row[0] for row in batch]), torch.stack([row[1] for row in batch])
         else:
             if isinstance(self.custom_tokenizer, SimpleTokenizer):
-                #max_seq_length = 77
-                #_txt = [row[1] for row in batch]
-                #text_feats = _txt
-                #text_feats = self.collate_text_feats(self.convert_sents_to_features(_txt, max_seq_length , self.custom_tokenizer))
-                #text_feats = [torch.tensor(f.input_ids) for f in self.convert_sents_to_features(_txt, max_seq_length , self.custom_tokenizer)]
-                data = torch.stack([row[0] for row in batch]), self.simple_tokenize([row[1] for row in batch])
-                return data
+                return torch.stack([row[0] for row in batch]), self.simple_tokenize([row[1] for row in batch])
             else:
                 return torch.stack([row[0] for row in batch]), self.custom_tokenizer([row[1] for row in batch], padding=True, truncation=True, return_tensors="pt")

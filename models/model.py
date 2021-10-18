@@ -6,10 +6,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from typing import List
-from simple_tokenizer import SimpleTokenizer as _Tokenizer
-
-_tokenizer = _Tokenizer()
 
 class Bottleneck(nn.Module):
     expansion = 4

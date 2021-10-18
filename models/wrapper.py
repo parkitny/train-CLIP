@@ -281,24 +281,10 @@ class CustomCLIPWrapper(CLIPWrapper):
         self.sink_temp.data.clamp_(-np.log(100), np.log(100))
         self.update_teacher()
 
-    def _encode_text_clip_vil(self, text, model):
-        x = model.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
-
-        #x = x + self.positional_embedding.type(self.dtype)
-        x = torch.unsqueeze(x, 0)
-        x = x.permute(1, 0, 2)  # NLD -> LND
-        x = model.transformer(x)
-        x = x.permute(1, 0, 2)  # LND -> NLD
-        x = model.ln_final(x).type(self.dtype)
-
-        # x.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ model.text_projection
-
-        return x
 
     def encode_text_clip_vil(self, text, model):    
         # We are passing one piece of text at a time so unsqueeze the first dim.
+        # The gather function will combine the output for us...
         x = torch.unsqueeze(model.token_embedding(text).type(self.dtype), 0)  # [batch_size, n_ctx, d_model]
 
         x = x + model.positional_embedding.type(self.dtype)
@@ -315,6 +301,7 @@ class CustomCLIPWrapper(CLIPWrapper):
 
     def encode_text(self, inputs, teacher=False):
         if self.model_name == 'RN50x4_VIL':
+            # TODO: Apply the attention mask here?
             if teacher:
                 return self.encode_text_clip_vil(inputs, self.teacher)
             else:
