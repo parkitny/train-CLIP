@@ -50,6 +50,12 @@ def extract_CLIP_from_CLIP_ViL(clip_vil_model_path, clip_model):
             print(common_keys)
             new_clip_state_dict[ft_clip_key] = clip_vil_state_dict[common_keys[0]]
         elif len(common_keys) > 1:
-            raise ValueError('Ambiguous, multiple replacement candidates')
-    clip_model.load_state_dict(new_clip_state_dict)
-    return clip_model
+            if ft_clip_key == 'positional_embedding':
+                # Use the visual_model.positional_embedding
+                new_clip_state_dict[ft_clip_key] = clip_vil_state_dict[common_keys[0]]
+            else:
+                raise ValueError('Ambiguous, multiple replacement candidates')
+    return new_clip_state_dict
+    #shapes = {k : w.shape for k, w in clip_model.state_dict().items()}
+    #clip_model.load_state_dict(new_clip_state_dict)
+    #return clip_model

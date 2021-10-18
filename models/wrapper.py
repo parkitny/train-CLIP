@@ -14,7 +14,8 @@ class CLIPWrapper(pl.LightningModule):
     def __init__(self,
                  model_name: str,
                  config: dict,
-                 minibatch_size: int
+                 minibatch_size: int,
+                 state_dict
                  ):
         """A lightning wrapper for a CLIP model as specified in the paper.
 
@@ -26,6 +27,8 @@ class CLIPWrapper(pl.LightningModule):
 
         self.model_name = model_name
         self.model = CLIP(**config)
+        if state_dict is not None:
+            self.model.load_state_dict(state_dict)
         self.minibatch_size = minibatch_size
         self.isViT = 'ViT' in self.model_name
 
@@ -161,15 +164,18 @@ class CustomCLIPWrapper(CLIPWrapper):
                  learning_rate=3e-3,
                  kl_coeff=1.0,
                  avg_word_embs=False,
-                 model_name='RN50'
+                 model_name='RN50',
+                 state_dict=None
                  ):
         with open('models/configs/RN.yaml') as fin:
             config = yaml.safe_load(fin)[model_name]
-        super().__init__(model_name, config, minibatch_size)
-        del self.model.visual
-        del self.model.transformer
-        self.model.visual = image_encoder
-        self.model.transformer = text_encoder
+        super().__init__(model_name, config, minibatch_size, state_dict)
+        if image_encoder is not None:
+            del self.model.visual
+            self.model.visual = image_encoder
+        if text_encoder is not None:
+            del self.model.transformer
+            self.model.transformer = text_encoder
         self.learning_rate = learning_rate
         self.avg_word_embs = avg_word_embs
         self.sink_temp = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))

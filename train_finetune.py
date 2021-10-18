@@ -19,6 +19,8 @@ def main(hparams):
     if hparams.minibatch_size < 1:
         hparams.minibatch_size = hparams.batch_size
 
+    img_encoder = None
+    txt_encoder = None
     model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_word_embs=True, model_name=hparams.model_name)
 
     if hparams.merge_base_clip_into_clip_vil:
@@ -30,7 +32,9 @@ def main(hparams):
         return
     else:
         # Load CLIP using weights from the CLIP-ViL checkpoint.
-        model = extract_CLIP_from_CLIP_ViL(hparams.load_checkpoint, model)
+        state_dict = extract_CLIP_from_CLIP_ViL(hparams.load_checkpoint, model.model)
+        tokenizer = AutoTokenizer.from_pretrained("johngiorgi/declutr-sci-base")
+        model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_word_embs=True, model_name=hparams.model_name, state_dict=state_dict)
         dm = TextImageDataModule.from_argparse_args(hparams, custom_tokenizer=tokenizer)
         trainer = Trainer.from_argparse_args(hparams, precision=16, max_epochs=32)
         trainer.fit(model, dm)
