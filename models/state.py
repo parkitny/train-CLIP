@@ -31,7 +31,11 @@ def merge_fine_tune_CLIP_into_CLIP_ViL(clip_vil_model_path, clip_model, save_pat
             print(common_keys)
             new_clip_vil_state_dict[common_keys[0]] = ft_clip_state_dict[ft_clip_key]
         elif len(common_keys) > 1:
-            raise ValueError('Ambiguous, multiple replacement candidates')
+            if ft_clip_key == 'positional_embedding':
+                # Use the visual_model.positional_embedding
+                new_clip_vil_state_dict[common_keys[0]] = ft_clip_state_dict[ft_clip_key]
+            else:
+                raise ValueError('Ambiguous, multiple replacement candidates')
     print('Saving...')
     torch.save(new_clip_vil_state_dict, save_path)
     print('DONE')

@@ -28,6 +28,7 @@ def main(hparams):
         assert hparams.save_path is not None
         img_encoder = None
         txt_encoder = None
+        # Find the latest checkpoint
         model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_word_embs=True, model_name=hparams.model_name)
         merge_fine_tune_CLIP_into_CLIP_ViL(hparams.load_checkpoint, model, hparams.save_path)
         return
@@ -47,6 +48,7 @@ def main(hparams):
             trainer = Trainer.from_argparse_args(hparams, precision=16, max_epochs=32)
             trainer.fit(model, dm)
             # TODO: Once fine-tuned, merge_fine_tune_CLIP_into_CLIP_ViL and save.
+            merge_fine_tune_CLIP_into_CLIP_ViL(hparams.load_checkpoint, model, hparams.save_path)
         else:
             img_encoder = resnet50(pretrained=True)
             img_encoder.fc = torch.nn.Linear(2048, 768)
